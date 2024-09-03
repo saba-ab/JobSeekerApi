@@ -2,6 +2,7 @@ using System.Globalization;
 using HtmlAgilityPack;
 using JobSeekerApi.Data;
 using JobSeekerApi.Models;
+using JobSeekerApi.Utilities;
 
 namespace JobSeekerApi.Services;
 
@@ -32,49 +33,36 @@ public class JobParserService
 
         foreach (var node in jobNodes)
         {
-            // Parse Job Title and URL (assuming <a> tag contains the title and link)
-            var titleNode = node.SelectSingleNode(".//a");
-            var title = titleNode?.InnerText.Trim();
+            // initialize parser object 
             
-            // Parse url from a tag attribute href
-            var relativeUrl = titleNode?.Attributes["href"]?.Value;
-            var url = !string.IsNullOrEmpty(relativeUrl) ? new Uri(new Uri(baseUrl), relativeUrl).ToString() : null;
+            var parser = new Parser(node, baseUrl);
+       
+            var title = parser.GetTitle();
+            
+            var url = parser.GetUrl();
 
-            // Parse Company Name (assuming it's in the 4th <td>)
-            var companyNode = node.SelectNodes(".//td")[3];
-            var company = companyNode?.InnerText.Trim();
+            var company = parser.GetCompany();
 
-            // Parse Location (assuming it's in the 3rd <td>)
-            var locationNode = node.SelectNodes(".//td")[2];
-            var location = locationNode?.InnerText.Trim();
+            var postedAt = parser.GetPostedDate();
 
-            // Platform (assuming this is constant for jobs.ge)
+            var validUntil = parser.GetValidUntilDate();
+
+            // maybe ignore location before finding logic on jobs.ge
+            var location = parser.GetLocation();
+
+            // place in enums
             var platform = "jobs.ge";
 
-            // Parse Category (assuming it's in the 2nd <td>, adjust as needed)
+            // temp
             var categoryNode = node.SelectNodes(".//td")[1];
             var category = categoryNode?.InnerText.Trim();
 
-            // Parse Posting Date (assuming it's in the 5th <td>)
-            var postedDateNode = node.SelectNodes(".//td")[4];
-            var postedDateText = postedDateNode?.InnerText.Trim();
-            DateTime.TryParseExact(postedDateText, "dd MMMM", new CultureInfo("ka-GE"), DateTimeStyles.None, out DateTime postedAt);
-
-            // Adjust the year for postedAt
-            postedAt = postedAt.AddYears(DateTime.Now.Year - postedAt.Year);
-
-            // Parse Valid Until (assuming it's based on the posting date, adjust if there's an actual field)
-            var validUntil = postedAt.AddMonths(1);
-
-            // Generate a Job ID (from star icon extracting id)
-            var jobIdString = node.SelectNodes(".//td")[0].FirstChild.Attributes["id"]?.Value;
-            if (string.IsNullOrEmpty(jobIdString))
+            var jobId = parser.GetJobId();
+            if (jobId == 0)
             {
                 continue;
             }
-            var jobId = int.Parse(jobIdString);
-
-            // Avoid adding duplicate entries
+            
             if (_context.Jobs.Any(j => j.JobId == jobId)) continue;
             var job = new Job
             {
