@@ -8,10 +8,13 @@ public class Job
     public string Url { get; set; }
     public string Title { get; set; }
     public string Company { get; set; }
-    public string? Location { get; set; }
+    public int CategoryId { get; set; }
     public string Platform { get; set; }
-    public string Category { get; set; }    
+    public string? Location { get; set; }
+    
+    public Category Category { get; set; }    
     public DateTime PostedAt { get; set; }
+    
     public DateTime ValidUntil { get; set; }
     
 }

@@ -10,7 +10,8 @@ public class JobParserService
 {
     private readonly JobContext _context;
     private readonly HttpClient _httpClient;
-    private readonly string baseUrl = "https://jobs.ge/";
+    private const string BaseUrl = "https://jobs.ge/?page={0}&q=&cid={1}&lid=0&jid=0&in_title=0&has_salary=0&is_ge=0&for_scroll=yes";
+    private readonly List<int> _categories = new() { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18 };
 
     public JobParserService(JobContext context, HttpClient httpClient)
     {
@@ -20,70 +21,97 @@ public class JobParserService
 
     public async Task ParseJobsAsync()
     {
-        var response = await _httpClient.GetStringAsync(baseUrl);
-        var document = new HtmlDocument();
-        document.LoadHtml(response);
-
-        var jobNodes = document.DocumentNode.SelectNodes("//tr[td/a]");
-
-        if (jobNodes == null)
+        var today = DateTime.Now.Day;
+        
+        foreach (var categoryId in _categories)
         {
-            return;
-        }
+            int page = 1;
+            bool shouldStop = false;
 
-        foreach (var node in jobNodes)
-        {
-            // initialize parser object 
-            
-            var parser = new Parser(node, baseUrl);
-       
-            var title = parser.GetTitle();
-            
-            var url = parser.GetUrl();
+            var category = _context.Categories.FirstOrDefault(c => c.Id == categoryId);
 
-            var company = parser.GetCompany();
-
-            var postedAt = parser.GetPostedDate();
-
-            var validUntil = parser.GetValidUntilDate();
-
-            // maybe ignore location before finding logic on jobs.ge
-            var location = parser.GetLocation();
-
-            // place in enums
-            var platform = "jobs.ge";
-
-            // temp
-            var categoryNode = node.SelectNodes(".//td")[1];
-            var category = categoryNode?.InnerText.Trim();
-
-            var jobId = parser.GetJobId();
-            if (jobId == 0)
+            if (category == null)
             {
                 continue;
             }
-            
-            if (_context.Jobs.Any(j => j.JobId == jobId)) continue;
-            var job = new Job
+
+            while (!shouldStop)
             {
-                Url = url,
-                JobId = jobId,
-                Title = title,
-                Company = company,
-                Location = location,
-                Platform = platform,
-                Category = category,
-                PostedAt = postedAt,
-                ValidUntil = validUntil
-            };
-            Console.WriteLine($"Adding job {job.PostedAt} to database.");
-            _context.Jobs.Add(job);
+                string url = string.Format(BaseUrl, page, categoryId);
+                var response = await _httpClient.GetStringAsync(url);
+                var document = new HtmlDocument();
+                document.LoadHtml(response);
+
+                var jobNodes = document.DocumentNode.SelectNodes("//tr[td/a]");
+
+                if (jobNodes == null || jobNodes.Count == 0)
+                {
+                    break; 
+                }
+
+                foreach (var node in jobNodes)
+                {
+                    var parser = new Parser(node, BaseUrl);
+
+                    var postedAt = parser.GetPostedDate();
+                    
+                    if (postedAt.Day != today)
+                    {
+                        shouldStop = true;
+                        break;
+                    }
+
+                    var jobId = parser.GetJobId();
+                    if (_context.Jobs.Any(j => j.JobId == jobId)) continue;
+
+                    var job = new Job
+                    {
+                        Url = parser.GetUrl(),
+                        JobId = jobId,
+                        Title = parser.GetTitle(),
+                        Company = parser.GetCompany(),
+                        Location = parser.GetLocation(),
+                        Platform = "jobs.ge",
+                        CategoryId = category.Id, 
+                        PostedAt = postedAt,
+                        ValidUntil = parser.GetValidUntilDate()
+                    };
+
+                    _context.Jobs.Add(job);
+                }
+
+                if (!shouldStop)
+                {
+                    page++; // Move to the next page if necessary
+                }
+            }
         }
-        Console.WriteLine($"{jobNodes.Count} Jobs have been parsed.");
-        var date = DateTime.Now.Day;
-        Console.WriteLine($"{date} day");
 
         await _context.SaveChangesAsync();
+    }
 
+    private string GetCategoryById(int categoryId)
+    {
+        return categoryId switch
+        {
+            1 => "ადმინისტრაცია/მენეჯმენტი",
+            2 => "გაყიდვები",
+            3 => "ფინანსები/სტატისტიკა",
+            4 => "PR/მარკეტინგი",
+            5 => "ლოჯისტიკა/ტრანსპორტი/დისტრიბუცია",
+            6 => "IT/პროგრამირება",
+            7 => "სამართალი",
+            8 => "მედიცინა/ფარმაცია",
+            9 => "სხვა",
+            10 => "კვება",
+            11 => "მშენებლობა/რემონტი",
+            12 => "განათლება",
+            13 => "მედია/გამომცემლობა",
+            14 => "სილამაზე/მოდა",
+            16 => "დასუფთავება",
+            17 => "დაცვა/უსაფრთხოება",
+            18 => "ზოგადი ტექნიკური პერსონალი",
+            _ => "Unknown"
+        };
     }
 }

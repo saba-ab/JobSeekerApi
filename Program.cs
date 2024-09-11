@@ -7,10 +7,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 Env.Load();
 
-var connectionString = $"Server={Environment.GetEnvironmentVariable("DatabaseServer")};" +
-                       $"Database={Environment.GetEnvironmentVariable("DatabaseName")};" +
-                       $"User Id={Environment.GetEnvironmentVariable("DatabaseUser")};" +
-                       $"Password={Environment.GetEnvironmentVariable("DatabasePassword")};" +
+var connectionString = $"Server={Environment.GetEnvironmentVariable("DATABASE_SERVER")};" +
+                       $"Database={Environment.GetEnvironmentVariable("DATABASE_NAME")};" +
+                       $"User Id={Environment.GetEnvironmentVariable("DATABASE_USER")};" +
+                       $"Password={Environment.GetEnvironmentVariable("DATABASE_PASSWORD")};" +
                        "TrustServerCertificate=True;";
 
 // Add services to the container.
@@ -44,6 +44,8 @@ using (var service = app.Services.CreateScope())
 {
     var services = service.ServiceProvider;
     var jobParserService = services.GetRequiredService<JobParserService>();
+    var context = services.GetRequiredService<JobContext>();
+    // DbSeeder.SeedCategories(context);
     await jobParserService.ParseJobsAsync();
 }
 
